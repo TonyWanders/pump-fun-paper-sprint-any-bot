@@ -12,11 +12,15 @@ kit's own baselines on the dev window with grade-local):
     family lost least (-0.42 SOL) while meeting the guardrails with a wide
     margin, and buy-and-hold barely moved. So this bot buys at creation,
     not after a run-up.
-  - Buy within 3 slots of a curve's CreateEvent, 0.10 SOL, only when the
-    launch looks clean: real reserves 0.3-30 SOL, the creator has not sold
-    and has not bought more than 2.5 SOL of their own coin, at most 3
-    distinct buyers so far (it is still early), and the price has not
-    already run up more than 100% from creation.
+  - Buy within 5 slots of a curve's CreateEvent, 0.10 SOL, only when the
+    launch looks clean AND already has traction: real reserves 0.3-30 SOL,
+    the creator has not sold and has not bought more than 2.5 SOL of their
+    own coin, at most 3 distinct buyers so far (it is still early), at
+    least 3 distinct non-creator buyers already in, and the price already
+    up at least 30% from creation. A launch nobody is buying is a dead
+    launch: on the dev window, buying every clean launch lost 0.33 SOL
+    over 224 coins, while this traction filter lost 0.11 SOL over 41
+    coins. The price has not already run up more than 100% from creation.
   - Exit fast and whole: +15% take-profit, -12% stop loss, out after 10
     slots, or at once if the creator sells. A fast cycle keeps all 5
     position slots turning over, which is what clears the ranking bar
@@ -48,12 +52,14 @@ BUY_SLIPPAGE_BPS = 10_000      # wide: a missed fill costs more than slippage
 SELL_SLIPPAGE_BPS = 10_000
 
 # --- entry filters -----------------------------------------------------------
-MAX_AGE_SLOTS = 3              # buy within 3 slots of creation, never later
+MAX_AGE_SLOTS = 5              # buy within 5 slots of creation, never later
 MIN_REAL_SOL = 300_000_000     # 0.3 SOL real reserves at creation
 MAX_REAL_SOL = 30_000_000_000  # 30 SOL: not already a big mature curve
 MAX_DEV_BUY = 2_500_000_000    # 2.5 SOL: creator must not have loaded up
 MAX_BUYERS = 3                 # still early: at most 3 distinct buyers
+MIN_BUYERS = 3                 # early traction: at least 3 distinct buyers
 MAX_RUNUP_BPS = 10000          # price at most +100% over creation price
+MIN_RUNUP_BPS = 3000           # price already up at least 30% from creation
 
 # --- exits -------------------------------------------------------------------
 STOP_LOSS_BPS = 8800            # sell when value falls to 88% of cost
@@ -155,6 +161,16 @@ def entry_ok(state, mint, tape, slot):
         return False
     # Price must not already have run up more than 100% from creation.
     if price[0] * tape.create_price[1] * 10000 > (10000 + MAX_RUNUP_BPS) * tape.create_price[0] * price[1]:
+        return False
+    # Early traction: the launch must already be moving. Count only
+    # non-creator buyers, and require the price up at least 30% from
+    # creation, so a launch nobody is buying never earns a stake.
+    # Measured on the dev window: buying every clean launch lost 0.33 SOL
+    # over 224 coins; this filter cut it to 41 coins and 0.11 SOL lost.
+    buyers = sum(1 for u in tape.buyers if u != tape.creator)
+    if buyers < MIN_BUYERS:
+        return False
+    if price[0] * tape.create_price[1] * 10000 < (10000 + MIN_RUNUP_BPS) * tape.create_price[0] * price[1]:
         return False
     return True
 
